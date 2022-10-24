@@ -9,7 +9,7 @@ librarian::shelf(plyr, dplyr, lubridate, tidyr, tibble, rstudioapi,
 
 # Setting working directory
 setwd(dirname(getActiveDocumentContext()$path))                                 # Set working directory to source file location
-mydir="Raw"                                                                     #Mention the directory (as "mydir") in the W.Dir. containing the datafiles
+mydir="Raw data"                                                                #Mention the directory (as "mydir") in the W.Dir. containing the datafiles
 myfiles= list.files(path=mydir, pattern="*.csv", full.names=TRUE)               #List all the .csv files in the specified "mydir" and assign it to "myfiles". 
 myfiles                                                                         #Shows all the files present 
 
@@ -18,15 +18,20 @@ myfiles                                                                         
 
 
 #Importing datafiles into single dataframe
-data_master <- ldply(myfiles, read.table, sep = " ", fill=T, header = F)%>%     #collectively apply "impost function for all the files in the specified directory
-  as_tibble()%>%                                                                #Convert the imported data as a tibble
+data_master <-
+  ldply(myfiles,
+        read.table,
+        sep = " ",
+        fill = T,
+        header = F) %>%     #collectively apply "impost function for all the files in the specified directory
+  as_tibble() %>%                                                                #Convert the imported data as a tibble
   select(select = -c(V2:V4, V10, V11, V17, V18, V24, V25,                       #Selecting only the relevant columns
                      V31, V32, V38, V39, V45, V46, V52, V53,
                      V59, V60, V66, V67, V73, V74, V80, V81,
                      V87, V88, V94, V95, V101, V102, V108, V109,
                      V115, V116))%>%
 #Rename all the columns while importing. 
-rename(time=V1,                              
+dplyr::rename(time=V1,                              
        sub_temp1=V5,co2_sample1=V6,scd30_temp1=V7,rh1=V8,wall_temp1=V9,
        sub_temp2=V12,co2_sample2=V13,scd30_temp2=V14,rh2=V15,wall_temp2=V16,
        sub_temp3=V19,co2_sample3=V20,scd30_temp3=V21,rh3=V22,wall_temp3=V23,
@@ -69,17 +74,18 @@ data_master[, 2:ncol(data_master)] <- lapply(data_master
 ##Setting first column as date-time variable
 data_master$time <- as_datetime(data_master$time)                                  
 #Setting the time boundaries of the dataset.
-data_peat <- subset(data_master,
-                      time >= as_datetime('2021-12-01 19:30:00') &
-                       time <= as_datetime('2021-12-16 19:30:00'))
+data_peat <- data_master %>%
+  subset(
+    time >= as_datetime('2021-12-01 19:30:00') &
+      time <= as_datetime('2021-12-16 19:30:00')
+  )
 
 
-data_peat
 str(data_peat)
 
-#Exporting the master  as a .csv
-write.csv(data_peat,"data_master_peat.csv", row.names = FALSE)
-# The dataset exported above (data_raw) contains raw, unmangled sampled readings
+# #Exporting the master  as a .csv if necessary
+# write.csv(data_peat,"data_master_peat.csv", row.names = FALSE)
+# # The dataset exported above (data_raw) contains raw, unmangled sampled readings
 
 
 
@@ -184,155 +190,23 @@ colnames(dataco2_grams_actual_peat)
 head(dataco2_grams_actual_peat)
 
 
+
+
+# Selecting columns with only the peat treatment used for CO2 balance analysis
+dataco2_grams_actual_peat <- dataco2_grams_actual_peat%>%
+  select(c(1,2,14,17))
+
+
+
+
+
 #Exporting the actual CO2 (g) datafile  as a .csv
-write.csv(dataco2_grams_actual_peat,"CO2_cum/actual_co2_grams_peat.csv", row.names = FALSE)
-write.csv(dataco2_grams_actual_peat,"CO2_grams/actual_co2_grams_peat.csv", row.names = FALSE)
-
-
-
-#----CUMULATIVE CO2 (GRAMS)---------------------------------------
-
-
-# Summing the column to get cumulative CO2 (grams)
-dataco2_cum_peat <- dataco2_grams_actual_peat%>% select(-c(1))%>% colSums(na.rm = T)%>%as_tibble()%>%
-  rename(cum_co2_g = value)
-### The `dataco2_grams` dataset is piped into select function where all columns 
-### except the first (i.e., time) is selected and then piped into colSums.
-### colSums gives the sum of each column and the output is converted as tibble 
-### and written as `dataco2_cum`
-
-
-#add bioreactor number as a serial number                  
-dataco2_cum_peat <- tibble::rowid_to_column(dataco2_cum_peat, "br")
-
-#Adding the treatments to corresponding to each bioreactor
-dataco2_cum_peat$trmt <- c("1", "3", "4", "4", "3", "2", "4", "2", 
-                      "2", "4", "2", "3", "1", "1", "3", "1", "R")%>%as.factor()
-
-
-# Sorting columns according to trmt
-dataco2_cum_peat <- arrange(dataco2_cum_peat, trmt)
-
-
-
-
-dataco2_cum_peat
-
-write.csv(dataco2_cum_peat,"CO2_cum/co2_cum_g_peat.csv", row.names = FALSE)
+write.csv(dataco2_grams_actual_peat,"CO2 analysis/co2_grams_peat.csv", row.names = FALSE)
 
 
 
 
 
-#----CO2_C-GRAMS AND CUMULATIVE CO2_C (GRAMS)---------------------------------------
-
-
-#Making a dataset with only sampled CO2 from the raw data 
-##The numbers are the order number of the columns pertaining to CO2 sampling.
-dataco2_peat <- select(data_peat, c(1, 3, 8, 13, 18, 23, 28,
-                                 33, 38, 43, 48, 53,
-                                 58, 63, 68, 73, 78, 83))
-
-
-
-##First, we need SCD30 temperature in Kelvin
-convert_to_kelvin <- function(x, na.rm=FALSE) (x+273.15)
-###The above line creates a function (i.e. x+273.15), which is the formula to
-### convert C to K. This function is assigned as "convert_to_kelvin".
-
-dataco2_c_peat <-  select(data_peat, c( 4, 9, 14, 19, 24, 29,
-                                   34, 39, 44, 49, 54,
-                                   59, 64, 69, 74, 79, 84))%>% 
-  mutate_at(c(1:17),convert_to_kelvin, na.rm = TRUE)%>%                         
-  add_column(dataco2_peat, .before = 1) 
-###Above, the columns in the master file pertaining to temperature are selected,
-###and then piped into mutate_at, assigning the "convert_to_kelvin" function.
-### The the columns in dataco2_actual (ppm readings) are appended to the datafile
-### where ".before=1" means the appended columns are added in the front (before 1st column of the active dataframe)
-### written as a new datafile, i.e., dataco2_cum
-
-
-
-
-#Calculating CO2-grams for each datapoint
-{
-  dataco2_c_peat$co2_grams1 <- ((dataco2_c_peat$co2_sample1/dataco2_c_peat$scd30_temp1)*0.00000304543044)                                    
-  dataco2_c_peat$co2_grams2 <- ((dataco2_c_peat$co2_sample2/dataco2_c_peat$scd30_temp2)*0.00000304543044)
-  dataco2_c_peat$co2_grams3 <- ((dataco2_c_peat$co2_sample3/dataco2_c_peat$scd30_temp3)*0.00000304543044)
-  dataco2_c_peat$co2_grams4 <- ((dataco2_c_peat$co2_sample4/dataco2_c_peat$scd30_temp4)*0.00000304543044)
-  dataco2_c_peat$co2_grams5 <- ((dataco2_c_peat$co2_sample5/dataco2_c_peat$scd30_temp5)*0.00000304543044)
-  dataco2_c_peat$co2_grams6 <- ((dataco2_c_peat$co2_sample6/dataco2_c_peat$scd30_temp6)*0.00000304543044)
-  dataco2_c_peat$co2_grams7 <- ((dataco2_c_peat$co2_sample7/dataco2_c_peat$scd30_temp7)*0.00000304543044)
-  dataco2_c_peat$co2_grams8 <- ((dataco2_c_peat$co2_sample8/dataco2_c_peat$scd30_temp8)*0.00000304543044)
-  dataco2_c_peat$co2_grams9 <- ((dataco2_c_peat$co2_sample9/dataco2_c_peat$scd30_temp9)*0.00000304543044)
-  dataco2_c_peat$co2_grams10 <- ((dataco2_c_peat$co2_sample10/dataco2_c_peat$scd30_temp10)*0.00000304543044)
-  dataco2_c_peat$co2_grams11 <- ((dataco2_c_peat$co2_sample11/dataco2_c_peat$scd30_temp11)*0.00000304543044)
-  dataco2_c_peat$co2_grams12 <- ((dataco2_c_peat$co2_sample12/dataco2_c_peat$scd30_temp12)*0.00000304543044)
-  dataco2_c_peat$co2_grams13 <- ((dataco2_c_peat$co2_sample13/dataco2_c_peat$scd30_temp13)*0.00000304543044)
-  dataco2_c_peat$co2_grams14 <- ((dataco2_c_peat$co2_sample14/dataco2_c_peat$scd30_temp14)*0.00000304543044)
-  dataco2_c_peat$co2_grams15 <- ((dataco2_c_peat$co2_sample15/dataco2_c_peat$scd30_temp15)*0.00000304543044)
-  dataco2_c_peat$co2_grams16 <- ((dataco2_c_peat$co2_sample16/dataco2_c_peat$scd30_temp16)*0.00000304543044)
-  dataco2_c_peat$co2_grams17 <- ((dataco2_c_peat$co2_sample17/dataco2_c_peat$scd30_temp17)*0.00000304543044)
-  
-  }
-
-
-
-dataco2_c_grams_peat <- dataco2_c_peat%>% select(-c(2:35))
-
-
-#Subtract Ambient from sampled values
-
-#Making a dataset with "actual" CO2 readings (with ambient readings subtracted)
-dataco2_c_grams_actual_peat <-  dataco2_c_grams_peat  %>%  mutate(dataco2_c_grams_peat[2:ncol(dataco2_c_grams_peat)] - co2_grams17)
-###Here, mutate is assigned to "each" column to be subtracted from column 17 (ambient)
-## and is written as new columns in new datafile (i.e., dataco2_actual)
-
-
-#Converting all the negative values in the columns (in dataco2_actual) to zero.
-##Assign the columns to be converted as "columns_to_convert".
-columns_to_convert <- c(2:18)
-#Mention the function: If negative>convert to 0; If not> let it be.
-replace_with_zero <- function(x, na.rm=FALSE) (ifelse(x < 0, yes = 0, no = x))
-##Choose the parent datafile (dataco2_actual) to be mutated at the columns assigned,
-## as the predefined function. 
-dataco2_c_grams_actual_peat <- dataco2_c_grams_actual_peat %>% mutate_at(columns_to_convert, 
-                                                           replace_with_zero, na.rm = TRUE)%>% 
-  rename_with( ~ gsub("sample", "actual", .x, fixed = TRUE), .cols = c(2:18))    #Renaming to substitute "sample" in the column names to "actual".
-
-colnames(dataco2_c_grams_actual_peat)
-head(dataco2_c_grams_actual_peat)
-
-
-#Exporting the actual CO2 (ppm) datafile  as a .csv
-write.csv(dataco2_c_grams_actual_peat,"Carbon/co2_c_grams_peat.csv", row.names = FALSE)
-
-#----CUMULATIVE CO2_C (GRAMS)---------------------------------------
-
-
-# Summing the column to get cumulative CO2 (grams)
-dataco2_c_cum_peat <- dataco2_c_grams_actual_peat%>% select(-c(1))%>% colSums(na.rm = T)%>%as_tibble()%>%
-  rename(cum_co2_c_g = value)
-### The `dataco2_grams` dataset is piped into select function where all columns 
-### except the first (i.e., time) is selected and then piped into colSums.
-### colSums gives the sum of each column and the output is converted as tibble 
-### and written as `dataco2_cum`
-
-
-#add bioreactor number as a serial number                  
-dataco2_c_cum_peat <- tibble::rowid_to_column(dataco2_c_cum_peat, "br")
-
-#Adding the treatments to corresponding to each bioreactor
-dataco2_c_cum_peat$trmt <- c("1", "3", "4", "4", "3", "2", "4", "2", 
-                             "2", "4", "2", "3", "1", "1", "3", "1", "R")%>%as.factor()
-
-# Sorting columns according to trmt
-dataco2_c_cum_peat <- arrange(dataco2_c_cum_peat, trmt)
-
-
-dataco2_c_cum_peat
-
-write.csv(dataco2_cum_peat,"Carbon/co2_c_cum_g_peat.csv", row.names = FALSE)
 
 
 
@@ -343,9 +217,7 @@ write.csv(dataco2_cum_peat,"Carbon/co2_c_cum_g_peat.csv", row.names = FALSE)
 #SUBSTRATE TEMPERATURE
 #Making a dataset with only substrate temperature from the master file 
 ##These numbers below are the order number of the columns pertaining to substrate temperature.
-temp_substrate_peat <- select(data_peat, c(1, 2, 7, 12, 17, 22, 27,
-                                 32, 37, 42, 47, 52,
-                                 57, 62, 67, 72, 77, 82))
+temp_substrate_peat <- select(data_peat, c(1, 2,  62, 77))
 temp_substrate_peat
 
 
@@ -399,9 +271,9 @@ time <= as_datetime('2022-01-05 15:30:00'))
 
 str(data_plug)
 
-#Exporting the master  as a .csv
-write.csv(data_plug,"data_master_plug.csv", row.names = FALSE)
-# The dataset exported above (data_raw) contains raw, unmangled sampled readings
+# #Exporting the master  as a .csv
+# write.csv(data_plug,"data_master_plug.csv", row.names = FALSE)
+# # The dataset exported above (data_raw) contains raw, unmangled sampled readings
 
 
 
@@ -520,155 +392,25 @@ colnames(dataco2_grams_actual_plug)
 head(dataco2_grams_actual_plug)
 
 
+
+# Selecting columns with only the peat treatment used for CO2 balance analysis
+dataco2_grams_actual_plug <- dataco2_grams_actual_plug%>%
+  select(c(1, 8, 11, 17))
+
+
+
+
+
 #Exporting the actual CO2 (ppm) datafile  as a .csv
-write.csv(dataco2_grams_actual_plug,"CO2_grams/actual_co2_grams_plug.csv", row.names = FALSE)
-write.csv(dataco2_grams_actual_plug,"CO2_cum/actual_co2_grams_plug.csv", row.names = FALSE)
-
-
-
-#----CUMULATIVE CO2 (GRAMS)---------------------------------------
-
-
-# Summing the column to get cumulative CO2 (grams)
-dataco2_cum_plug <- dataco2_grams_actual_plug%>% select(-c(1))%>% colSums(na.rm = T)%>%as_tibble()%>%
-  rename(cum_co2_g = value)
-### The `dataco2_grams` dataset is piped into select function where all columns 
-### except the first (i.e., time) is selected and then piped into colSums.
-### colSums gives the sum of each column and the output is converted as tibble 
-### and written as `dataco2_cum`
-
-
-#add bioreactor number as a serial number                  
-dataco2_cum_plug <- tibble::rowid_to_column(dataco2_cum_plug, "br")
-
-#Adding the treatments to corresponding to each bioreactor
-dataco2_cum_plug$trmt <- c("2", "3", "2", "3", "4", "4", "1", "3", 
-                           "3", "1", "2", "4", "2", "1", "4", "1", "R")%>%as.factor()
-
-
-# Sorting columns according to trmt
-dataco2_cum_plug <- arrange(dataco2_cum_plug, trmt)
-
-
-
-
-dataco2_cum_plug
-
-write.csv(dataco2_cum_plug,"CO2_cum/co2_cum_g_plug.csv", row.names = FALSE)
+write.csv(dataco2_grams_actual_plug,"CO2 analysis/co2_grams_plug.csv", row.names = FALSE)
 
 
 
 
 
-#----CO2_C-GRAMS AND CUMULATIVE CO2_C (GRAMS)---------------------------------------
-
-
-#Making a dataset with only sampled CO2 from the raw data 
-##The numbers are the order number of the columns pertaining to CO2 sampling.
-dataco2_plug <- select(data_plug, c(1, 3, 8, 13, 18, 23, 28,
-                                    33, 38, 43, 48, 53,
-                                    58, 63, 68, 73, 78, 83))
 
 
 
-##First, we need SCD30 temperature in Kelvin
-convert_to_kelvin <- function(x, na.rm=FALSE) (x+273.15)
-###The above line creates a function (i.e. x+273.15), which is the formula to
-### convert C to K. This function is assigned as "convert_to_kelvin".
-
-dataco2_c_plug <-  select(data_plug, c( 4, 9, 14, 19, 24, 29,
-                                        34, 39, 44, 49, 54,
-                                        59, 64, 69, 74, 79, 84))%>% 
-  mutate_at(c(1:17),convert_to_kelvin, na.rm = TRUE)%>%                         
-  add_column(dataco2_plug, .before = 1) 
-###Above, the columns in the master file pertaining to temperature are selected,
-###and then piped into mutate_at, assigning the "convert_to_kelvin" function.
-### The the columns in dataco2_actual (ppm readings) are appended to the datafile
-### where ".before=1" means the appended columns are added in the front (before 1st column of the active dataframe)
-### written as a new datafile, i.e., dataco2_cum
-
-
-
-
-#Calculating CO2-grams for each datapoint
-{
-  dataco2_c_plug$co2_grams1 <- ((dataco2_c_plug$co2_sample1/dataco2_c_plug$scd30_temp1)*0.00000304543044)                                    
-  dataco2_c_plug$co2_grams2 <- ((dataco2_c_plug$co2_sample2/dataco2_c_plug$scd30_temp2)*0.00000304543044)
-  dataco2_c_plug$co2_grams3 <- ((dataco2_c_plug$co2_sample3/dataco2_c_plug$scd30_temp3)*0.00000304543044)
-  dataco2_c_plug$co2_grams4 <- ((dataco2_c_plug$co2_sample4/dataco2_c_plug$scd30_temp4)*0.00000304543044)
-  dataco2_c_plug$co2_grams5 <- ((dataco2_c_plug$co2_sample5/dataco2_c_plug$scd30_temp5)*0.00000304543044)
-  dataco2_c_plug$co2_grams6 <- ((dataco2_c_plug$co2_sample6/dataco2_c_plug$scd30_temp6)*0.00000304543044)
-  dataco2_c_plug$co2_grams7 <- ((dataco2_c_plug$co2_sample7/dataco2_c_plug$scd30_temp7)*0.00000304543044)
-  dataco2_c_plug$co2_grams8 <- ((dataco2_c_plug$co2_sample8/dataco2_c_plug$scd30_temp8)*0.00000304543044)
-  dataco2_c_plug$co2_grams9 <- ((dataco2_c_plug$co2_sample9/dataco2_c_plug$scd30_temp9)*0.00000304543044)
-  dataco2_c_plug$co2_grams10 <- ((dataco2_c_plug$co2_sample10/dataco2_c_plug$scd30_temp10)*0.00000304543044)
-  dataco2_c_plug$co2_grams11 <- ((dataco2_c_plug$co2_sample11/dataco2_c_plug$scd30_temp11)*0.00000304543044)
-  dataco2_c_plug$co2_grams12 <- ((dataco2_c_plug$co2_sample12/dataco2_c_plug$scd30_temp12)*0.00000304543044)
-  dataco2_c_plug$co2_grams13 <- ((dataco2_c_plug$co2_sample13/dataco2_c_plug$scd30_temp13)*0.00000304543044)
-  dataco2_c_plug$co2_grams14 <- ((dataco2_c_plug$co2_sample14/dataco2_c_plug$scd30_temp14)*0.00000304543044)
-  dataco2_c_plug$co2_grams15 <- ((dataco2_c_plug$co2_sample15/dataco2_c_plug$scd30_temp15)*0.00000304543044)
-  dataco2_c_plug$co2_grams16 <- ((dataco2_c_plug$co2_sample16/dataco2_c_plug$scd30_temp16)*0.00000304543044)
-  dataco2_c_plug$co2_grams17 <- ((dataco2_c_plug$co2_sample17/dataco2_c_plug$scd30_temp17)*0.00000304543044)
-  
-  }
-
-
-
-dataco2_c_grams_plug <- dataco2_c_plug%>% select(-c(2:35))
-
-
-#Subtract Ambient from sampled values
-
-#Making a dataset with "actual" CO2 readings (with ambient readings subtracted)
-dataco2_c_grams_actual_plug <-  dataco2_c_grams_plug  %>%  mutate(dataco2_c_grams_plug[2:ncol(dataco2_c_grams_plug)] - co2_grams17)
-###Here, mutate is assigned to "each" column to be subtracted from column 17 (ambient)
-## and is written as new columns in new datafile (i.e., dataco2_actual)
-
-
-#Converting all the negative values in the columns (in dataco2_actual) to zero.
-##Assign the columns to be converted as "columns_to_convert".
-columns_to_convert <- c(2:18)
-#Mention the function: If negative>convert to 0; If not> let it be.
-replace_with_zero <- function(x, na.rm=FALSE) (ifelse(x < 0, yes = 0, no = x))
-##Choose the parent datafile (dataco2_actual) to be mutated at the columns assigned,
-## as the predefined function. 
-dataco2_c_grams_actual_plug <- dataco2_c_grams_actual_plug %>% mutate_at(columns_to_convert, 
-                                                                         replace_with_zero, na.rm = TRUE)%>% 
-  rename_with( ~ gsub("sample", "actual", .x, fixed = TRUE), .cols = c(2:18))    #Renaming to substitute "sample" in the column names to "actual".
-
-colnames(dataco2_c_grams_actual_plug)
-head(dataco2_c_grams_actual_plug)
-
-
-#Exporting the actual CO2  datafile  as a .csv
-write.csv(dataco2_c_grams_actual_plug,"Carbon/co2_c_grams_plug.csv", row.names = FALSE)
-
-#----CUMULATIVE CO2_C (GRAMS)---------------------------------------
-
-
-# Summing the column to get cumulative CO2 (grams)
-dataco2_c_cum_plug <- dataco2_c_grams_actual_plug%>% select(-c(1))%>% colSums(na.rm = T)%>%as_tibble()%>%
-  rename(cum_co2_c_g = value)
-### The `dataco2_grams` dataset is piped into select function where all columns 
-### except the first (i.e., time) is selected and then piped into colSums.
-### colSums gives the sum of each column and the output is converted as tibble 
-### and written as `dataco2_cum`
-
-
-#add bioreactor number as a serial number                  
-dataco2_c_cum_plug <- tibble::rowid_to_column(dataco2_c_cum_plug, "br")
-
-#Adding the treatments to corresponding to each bioreactor
-dataco2_c_cum_plug$trmt <- c("2", "3", "2", "3", "4", "4", "1", "3", 
-                             "3", "1", "2", "4", "2", "1", "4", "1", "R")%>%as.factor()
-
-# Sorting columns according to trmt
-dataco2_c_cum_plug <- arrange(dataco2_c_cum_plug, trmt)
-
-
-dataco2_c_cum_plug
-
-write.csv(dataco2_cum_plug,"Carbon/co2_c_cum_g_plug.csv", row.names = FALSE)
 
 
 
@@ -679,19 +421,9 @@ write.csv(dataco2_cum_plug,"Carbon/co2_c_cum_g_plug.csv", row.names = FALSE)
 #SUBSTRATE TEMPERATURE
 #Making a dataset with only substrate temperature from the master file 
 ##These numbers below are the order number of the columns pertaining to substrate temperature.
-temp_substrate_plug <- select(data_plug, c(1, 2, 7, 12, 17, 22, 27,
-                                                  32, 37, 42, 47, 52,
-                                                  57, 62, 67, 72, 77, 82))
+temp_substrate_plug <- select(data_plug, c(1, 32, 47, 52, 77))
 temp_substrate_plug
 
-
-
-#Reducing the dataset by reducing sampling interval
-# groups <- cut(as.POSIXct(temp_substrate$time), breaks="5 min")
-# library(plyr)
-# temp_substrate <- ddply(temp_substrate, "groups", tail, 1)[, -1]
-###Through the code above, the dataset size is reduced by retaining the sampling
-###of every 5 mins ("breaks= 5min"). Change the time interval as necessary.
 
 
 
