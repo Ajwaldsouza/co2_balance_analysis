@@ -201,7 +201,7 @@ dataco2_grams_actual_peat <- dataco2_grams_actual_peat%>%
 
 
 #Exporting the actual CO2 (g) datafile  as a .csv
-write.csv(dataco2_grams_actual_peat,"CO2 analysis/co2_grams_peat.csv", row.names = FALSE)
+write.csv(dataco2_grams_actual_peat,"CO2 data/co2_grams_peat.csv", row.names = FALSE)
 
 
 
@@ -402,7 +402,7 @@ dataco2_grams_actual_plug <- dataco2_grams_actual_plug%>%
 
 
 #Exporting the actual CO2 (ppm) datafile  as a .csv
-write.csv(dataco2_grams_actual_plug,"CO2 analysis/co2_grams_plug.csv", row.names = FALSE)
+write.csv(dataco2_grams_actual_plug,"CO2 data/co2_grams_plug.csv", row.names = FALSE)
 
 
 
