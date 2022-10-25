@@ -16,3 +16,5 @@ The database `Data/` contains all the data and code used. In `Data/`, `Raw data/
 
 To run this analysis, download the complete repository from Zenodo, and run the R scripts. \
 Warning: Changing the folder structure can lead to failure of scripts running.
+
+Just testting the capabilities of VS Code. 
